@@ -26,6 +26,7 @@ package main
 //
 
 import (
+	"context"
 	"io"
 	"log"
 	"os"
@@ -38,7 +39,6 @@ func sender(id int, c chan *message, in io.Reader) {
 	for {
 		n, err := in.Read(buffer)
 		if n > 0 {
-			log.Printf("%d read %d bytes", id, n)
 			c <- &message{id: id, value: string(buffer[:n]), closed: false}
 		}
 		if err == io.EOF {
@@ -58,11 +58,11 @@ type message struct {
 }
 
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	agg := make(chan *message)
 
-	cmd := exec.Command(os.Args[1], os.Args[2:]...)
-
-	log.Printf("Running %s...", os.Args[1])
+	cmd := exec.CommandContext(ctx, os.Args[1], os.Args[2:]...)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -76,27 +76,26 @@ func main() {
 	}
 	go sender(2, agg, stderr)
 
-	log.Printf("Starting command")
 	err = cmd.Start()
 	if err != nil {
+		// this path will occur if the command can't be found.  Other errors
+		// are possible, but this is most likely.
 		log.Fatalf("running cmd: %v", err)
 	}
 
-	log.Printf("Reading channels")
 	activeCount := 2
 	for msg := range agg {
 		if msg.closed {
 			log.Printf("Channel %d closed", msg.id)
 			activeCount--
 			if activeCount == 0 {
-				return
+				break
 			}
 		} else {
 			log.Printf("channel %d sent %s", msg.id, msg.value)
 		}
 	}
 
-	log.Printf("Waiting for command to exit...")
 	if err := cmd.Wait(); err != nil {
 		if exiterr, ok := err.(*exec.ExitError); ok {
 			// The program has exited with an exit code != 0
@@ -107,5 +106,5 @@ func main() {
 			log.Fatalf("cmd.Wait: %v", err)
 		}
 	}
-	log.Printf("Command exited with status code 0")
+	log.Printf("Exit status: 0")
 }
