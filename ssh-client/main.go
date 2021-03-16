@@ -13,10 +13,11 @@ import (
 
 func main() {
 	home := os.Getenv("HOME")
+	user := os.Getenv("USER")
 	pubkeyFilename := fmt.Sprintf("%s/.ssh/id_rsa", home)
 
 	config := &ssh.ClientConfig{
-		User: "explorer",
+		User: user,
 		Auth: []ssh.AuthMethod{
 			publicKey(pubkeyFilename),
 		},
